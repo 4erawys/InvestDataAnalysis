@@ -1,0 +1,19 @@
+# Raw source data can be large, licensed, or sensitive.
+data/raw/
+
+# Keep processed datasets versioned.
+!data/processed/
+!data/processed/**
+
+# Python cache and test artifacts.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local environments and machine-specific settings.
+.env
+.venv/
+venv/
+
+# Generated notebook checkpoints.
+.ipynb_checkpoints/
