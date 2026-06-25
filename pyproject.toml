@@ -1,0 +1,5 @@
+[tool.pytest.ini_options]
+# The invest_analysis package lives under src/; add it to the import path so
+# tests can `import invest_analysis` without installing the package.
+pythonpath = ["src"]
+testpaths = ["tests"]
