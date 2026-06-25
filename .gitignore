@@ -17,3 +17,8 @@ venv/
 
 # Generated notebook checkpoints.
 .ipynb_checkpoints/
+
+documents/
+.vscode/
+.claude/
+.codex

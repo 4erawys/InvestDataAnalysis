@@ -2,43 +2,53 @@
 
 ## Project Structure & Module Organization
 
-This repository is intended for Python-based investment product data analysis. The repository is currently minimal, so use the following structure as it grows:
+This repository is a Python investment data workspace. The current layout is:
 
-- `src/` for reusable analysis code, data loading utilities, and modeling modules.
-- `notebooks/` for exploratory Jupyter notebooks.
-- `tests/` for automated tests that mirror `src/` modules.
-- `data/raw/` for immutable source files and `data/processed/` for generated datasets. Do not commit large or sensitive data files unless explicitly approved.
-- `reports/` or `outputs/` for generated charts, tables, and analysis summaries.
+- `scripts/` for one-off data fetchers and plot generators.
+- `data/raw/` for downloaded source files. This directory is ignored by Git.
+- `data/processed/` for cleaned, analysis-ready CSVs that should be versioned.
+- `reports/figures/` for generated charts.
+- `AGENTS.md` for contributor guidance and repo conventions.
+
+Keep new reusable code in `scripts/` only if it is small and task-specific. If shared logic grows, move it into a proper module.
 
 ## Build, Test, and Development Commands
 
-Run all project commands inside the provided conda environment named `invest`.
+Run everything inside the `invest` conda environment.
 
-- `conda run -n invest python --version` checks the active Python runtime.
-- `conda run -n invest python path/to/script.py` runs an analysis script.
-- `conda run -n invest pytest` runs the test suite once tests exist.
-- `mamba install -n invest <package>` installs project dependencies into the correct environment.
+- `conda run -n invest python scripts/fetch_gold_price_data.py` downloads and prepares gold data.
+- `conda run -n invest python scripts/fetch_index_data.py` builds U.S. and China equity index datasets.
+- `conda run -n invest python scripts/fetch_china_index_data.py` fetches Shanghai and CSI 300 data.
+- `conda run -n invest python scripts/fetch_bond_data.py` fetches U.S. and China bond series.
+- `conda run -n invest python scripts/plot_all_asset_curves.py` renders the combined figure.
+- `conda run -n invest python scripts/plot_gold_price_trend.py` renders the gold-only figure.
 
-If a dependency file is added later, prefer updating it together with the environment change, for example `environment.yml` or `requirements.txt`.
+Install missing packages with `mamba install -n invest <package>`.
 
 ## Coding Style & Naming Conventions
 
-Use Python with 4-space indentation and clear, typed function signatures where practical. Prefer small, reusable functions in `src/` over long notebook-only workflows. Use `snake_case` for functions, variables, modules, and file names; use `PascalCase` for classes.
+Use Python 4-space indentation, `snake_case` for files/functions/variables, and `PascalCase` for classes. Prefer explicit column names in CSVs and keep filenames descriptive, for example `sp500_annual_1926_2025.csv`.
 
-Keep notebooks focused on exploration and presentation. Move stable data cleaning, feature engineering, and calculation logic into importable modules so it can be tested.
+Keep scripts direct and reproducible. Avoid new abstractions unless they will be reused by multiple scripts.
 
-## Testing Guidelines
+## Data Handling
 
-Use `pytest` for automated tests. Name test files `test_<module>.py` and test functions `test_<behavior>()`. Place tests under `tests/`, following the structure of `src/` where possible.
+Treat `data/raw/` as source material and `data/processed/` as the committed output. Raw downloads may be large, licensed, or noisy; do not add them to Git unless they are required for reproducibility.
 
-For financial calculations, include tests for boundary cases such as missing prices, zero returns, non-trading days, currency mismatches, and empty input datasets.
+When adding a new series, preserve the existing CSV pattern:
+
+```csv
+year,<value_column>,frequency,source,source_url,notes
+```
+
+## Testing & Verification
+
+There is no formal test suite yet. Verify changes by running the relevant script and checking row counts, year ranges, and representative head/tail rows. For plots, confirm the output PNG exists and is non-empty.
 
 ## Commit & Pull Request Guidelines
 
-This repository has no existing commit history yet, so use concise, imperative commit messages such as `Add portfolio return calculation` or `Document data directory layout`.
-
-Pull requests should include a short summary, the reason for the change, commands run for verification, and notes about any data assumptions. Include screenshots or exported charts when a change affects visual reports.
+Use short, imperative commit messages such as `Add gold trend plot` or `Fetch bond index data`. Pull requests should describe the data source, the date range covered, and any caveats about series definitions.
 
 ## Security & Configuration Tips
 
-Do not commit API keys, account identifiers, brokerage exports, or proprietary datasets. Store local secrets in ignored environment files such as `.env`, and document required variable names without exposing values.
+Do not commit API keys, account identifiers, or proprietary datasets. Keep local-only settings in ignored files such as `.env`. Use the existing `invest` environment for all runs; do not switch environments mid-task.
