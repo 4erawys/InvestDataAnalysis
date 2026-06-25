@@ -1,0 +1,185 @@
+"""Streamlit UI for the V1 portfolio backtesting tool.
+
+This is the UI shell only: it collects parameters, calls the pure computation
+layer in ``invest_analysis``, and renders charts. It must not contain any
+backtest math itself, and the computation layer never imports streamlit.
+
+Run with:
+
+    conda run -n invest streamlit run app.py
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+# The invest_analysis package lives under src/. pytest finds it via
+# pyproject.toml's pythonpath, but `streamlit run` does not read that config,
+# so add src/ to the import path here.
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+
+import plotly.graph_objects as go
+import streamlit as st
+
+from invest_analysis import data_loader as dl
+from invest_analysis import metrics as m
+from invest_analysis import portfolio as pf
+from invest_analysis.assets import get_asset_catalog
+
+
+REBALANCE_OPTIONS = {
+    "不再平衡（买入持有）": "none",
+    "月度再平衡": "monthly",
+    "季度再平衡": "quarterly",
+}
+
+
+@st.cache_data(show_spinner=False)
+def load_catalog_assets(asset_ids: list[str]):
+    """Cached wrapper over data_loader.load_assets (UI-layer caching only)."""
+    return dl.load_assets(asset_ids)
+
+
+def render_header() -> None:
+    st.title("投资组合回测分析 · V1")
+    st.info(
+        "**数据口径说明**：当前为**年度**数据；数值为原始指数点位 / 价格 / 总回报指数，"
+        "**未处理汇率**。月度 / 季度再平衡在年度数据下为**接口级近似**"
+        "（每个年度节点调回目标权重），引入更高频数据后才精确生效。"
+    )
+
+
+def collect_params(catalog: dict) -> tuple[list[str], dict[str, float], str]:
+    """Sidebar controls; returns (asset_ids, weights_decimal, rebalance_mode)."""
+    st.sidebar.header("回测参数")
+
+    name_to_id = {meta["name"]: aid for aid, meta in catalog.items()}
+    selected_names = st.sidebar.multiselect(
+        "选择资产", options=list(name_to_id.keys())
+    )
+    asset_ids = [name_to_id[name] for name in selected_names]
+
+    weights: dict[str, float] = {}
+    if asset_ids:
+        st.sidebar.subheader("权重配置（%）")
+        default = round(100.0 / len(asset_ids), 2)
+        for aid in asset_ids:
+            weights[aid] = st.sidebar.number_input(
+                catalog[aid]["name"],
+                min_value=0.0,
+                max_value=100.0,
+                value=default,
+                step=1.0,
+                key=f"w_{aid}",
+            )
+
+    rebalance_label = st.sidebar.radio(
+        "再平衡模式", options=list(REBALANCE_OPTIONS.keys())
+    )
+    rebalance = REBALANCE_OPTIONS[rebalance_label]
+
+    # Convert percentages to decimals for the computation layer.
+    weights_decimal = {aid: w / 100.0 for aid, w in weights.items()}
+    return asset_ids, weights_decimal, rebalance
+
+
+def build_figure(normalized, nav) -> go.Figure:
+    """Portfolio nav plus per-asset normalized reference curves."""
+    fig = go.Figure()
+    for col in normalized.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=normalized.index,
+                y=normalized[col],
+                name=col,
+                mode="lines",
+                line=dict(width=1, dash="dot"),
+                opacity=0.6,
+            )
+        )
+    fig.add_trace(
+        go.Scatter(
+            x=nav.index,
+            y=nav.values,
+            name="组合净值",
+            mode="lines",
+            line=dict(width=3, color="#d62728"),
+        )
+    )
+    fig.update_layout(
+        title="组合净值曲线（起点 = 1）",
+        xaxis_title="年份",
+        yaxis_title="净值",
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+    )
+    # rangeslider is visual zoom only; it does NOT drive metric recomputation.
+    fig.update_xaxes(rangeslider_visible=True)
+    return fig
+
+
+def render_metrics(metrics: dict[str, float]) -> None:
+    cols = st.columns(5)
+    cols[0].metric("累计收益率", f"{metrics['cumulative_return']:.2%}")
+    cols[1].metric("年化收益率", f"{metrics['annualized_return']:.2%}")
+    cols[2].metric("年化波动率", f"{metrics['annualized_volatility']:.2%}")
+    cols[3].metric("最大回撤", f"{metrics['max_drawdown']:.2%}")
+    sharpe = metrics["sharpe_ratio"]
+    cols[4].metric("夏普比率", "—" if sharpe != sharpe else f"{sharpe:.2f}")
+
+
+def main() -> None:
+    st.set_page_config(page_title="投资组合回测 · V1", layout="wide")
+    catalog = get_asset_catalog()
+
+    render_header()
+    asset_ids, weights, rebalance = collect_params(catalog)
+
+    if not asset_ids:
+        st.info("请在左侧选择至少一个资产。")
+        return
+
+    # Weight-sum check before doing any work (uses validate_weights tolerance).
+    total_pct = sum(weights.values()) * 100
+    if abs(total_pct - 100.0) > 1e-4:
+        st.error(f"权重之和需为 100%，当前为 {total_pct:.2f}%。请调整后再查看结果。")
+        return
+
+    try:
+        data = load_catalog_assets(asset_ids)
+    except ValueError as exc:
+        st.error(f"无法加载所选资产：{exc}")
+        return
+
+    year_min, year_max = int(data.index.min()), int(data.index.max())
+    if year_min >= year_max:
+        st.warning("所选资产的共同年份不足以回测。")
+        return
+
+    start, end = st.slider(
+        "回测区间（年）",
+        min_value=year_min,
+        max_value=year_max,
+        value=(year_min, year_max),
+    )
+    st.caption(f"所选资产共同年份范围：{year_min} – {year_max}")
+
+    try:
+        sliced = dl.filter_date_range(data, start, end)
+        if len(sliced) < 2:
+            st.warning("所选区间过短（不足 2 个年度点），无法计算指标。")
+            return
+        normalized = dl.normalize_prices(sliced)
+        nav = pf.backtest_portfolio(normalized, weights, rebalance)
+        metrics = m.calculate_metrics(nav)
+    except ValueError as exc:
+        st.error(f"回测失败：{exc}")
+        return
+
+    render_metrics(metrics)
+    st.plotly_chart(build_figure(normalized, nav), use_container_width=True)
+
+
+if __name__ == "__main__":
+    main()
