@@ -4,19 +4,29 @@
 
 ## 环境准备
 
-所有命令在 conda 环境 `invest` 中运行（请勿新建或切换环境）。
+所有命令在 conda 环境 `invest` 中运行。首次需先创建该环境，再安装依赖；环境建好后请勿另建新环境或中途切换。
 
 ```bash
-mamba install -n invest streamlit plotly pandas pytest -y   # 首次安装依赖
+conda create -n invest python=3.13 -y                       # 首次创建环境
+conda install -n invest streamlit plotly pandas pytest -y   # 安装依赖
 ```
 
 ## 启动应用
+
+首选方式：用 `run_app.py` 启动，自动分配一个空闲端口，无需关心端口占用。
+
+```bash
+conda run -n invest python run_app.py
+```
+
+`run_app.py` 先由操作系统分配一个空闲端口，再传给 `streamlit run app.py`，并原样透传额外参数（如 `--server.headless true`）。启动后浏览器访问终端打印的实际地址。
+
+也可直接用 Streamlit 启动（默认固定 http://localhost:8501，端口被占用时会直接报错退出）：
 
 ```bash
 conda run -n invest streamlit run app.py
 ```
 
-启动后浏览器访问终端提示的地址（默认 http://localhost:8501）。
 在左侧边栏选择资产、配置权重（合计需为 100%）、选择再平衡模式，主区域选择回测区间；参数变化即自动刷新组合净值曲线与指标。
 
 ## 运行测试
