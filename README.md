@@ -35,6 +35,57 @@ conda run -n invest streamlit run app.py
 conda run -n invest pytest
 ```
 
+## 打包成 Windows 桌面程序并分发
+
+面向「把工具发给没有 Python 环境的同事」的场景，可用 [`streamlit-desktop-app`](https://github.com/ohtaman/streamlit-desktop-app) 把应用打包：它底层是 PyInstaller，外加一个 pywebview 原生窗口——双击启动、关窗口即自动结束后台进程，无浏览器标签、无残留控制台。
+
+采用 **onedir（目录）模式**：产物是一个文件夹 `dist/InvestBacktest/`，内含 `InvestBacktest.exe` 与 `_internal/`（Python 运行时、DLL、数据）。相比单文件 onefile，**没有每次启动解压到临时目录的开销，启动快很多**；代价是产物为文件夹而非单文件——分发时打包成 zip 即可。
+
+### 构建
+
+首次需安装打包依赖（仅构建机需要，使用者不需要）：
+
+```bash
+conda run -n invest python -m pip install streamlit-desktop-app
+```
+
+在仓库根目录运行构建脚本：
+
+```bash
+conda run -n invest python build_exe.py
+```
+
+产物为 `dist/InvestBacktest/` 文件夹。脚本已固定好关键参数：把 `src/` 加入导入路径、整包收集 `invest_analysis` 与 `plotly`、并将 `data/processed` 打进产物（运行时由 `data_loader.py` 经 `sys._MEIPASS` 定位，onedir 下指向 `_internal/`）。
+
+说明：
+
+- **体积约数百 MB**（带着 pandas / plotly / streamlit）；onedir 启动**无解压、几乎瞬时**。
+- **数据已内嵌**：所有年度 CSV 打进 `_internal/data/processed/`，使用者无需附带 `data/` 目录。
+- **整个文件夹是一个整体**：`InvestBacktest.exe` 必须和同级的 `_internal/` 待在一起，不能只拷 exe。
+- `build/`、`dist/`、`*.spec` 均已在 `.gitignore` 中，**不提交进仓库**。
+
+### 首次运行的 SmartScreen 提示
+
+未做代码签名的 exe，Windows 会弹「Windows 已保护你的电脑 / 未知发布者」。点 **更多信息 → 仍要运行** 即可。彻底消除需购买代码签名证书，小范围内部分发一般不必。
+
+### 分发：打包成 zip，经 GitHub Releases 发布
+
+构建产物不该进 git（撑大历史）。先把整个文件夹压成 zip，再作为 **Release 附件**上传（单附件上限 2GB）：
+
+```bash
+# 1) 把 dist/InvestBacktest/ 整个文件夹压成 zip（PowerShell）：
+powershell -Command "Compress-Archive -Path dist/InvestBacktest/* -DestinationPath dist/InvestBacktest-v1.0.0-win64.zip -Force"
+
+# 2) gh 首次需登录一次（交互式，浏览器授权）：
+conda run -n invest gh auth login
+
+# 3) 打 tag 并发布，上传 zip：
+conda run -n invest gh release create v1.0.0 dist/InvestBacktest-v1.0.0-win64.zip \
+  --title "投资组合回测 v1.0.0" --notes "Windows 版，解压后双击 InvestBacktest.exe 运行，无需 Python。"
+```
+
+使用者从仓库 **Releases 页面**下载 zip，**解压到任意目录后双击 `InvestBacktest.exe`** 即可（注意保持 `exe` 与 `_internal/` 在一起）。
+
 ## 当前支持的资产
 
 | 资产 | 数据列 | 起始年份 |

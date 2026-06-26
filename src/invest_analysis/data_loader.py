@@ -6,6 +6,7 @@ streamlit. Indices are years for now; the same interface extends to dates later.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pandas as pd
@@ -13,8 +14,21 @@ import pandas as pd
 from .assets import ASSETS
 
 
-# Repo root inferred from this file: src/invest_analysis/data_loader.py -> parents[2].
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+def _resolve_repo_root() -> Path:
+    """Locate the directory that contains ``data/processed/``.
+
+    In a normal checkout this file lives at src/invest_analysis/data_loader.py,
+    so the repo root is parents[2]. When frozen by PyInstaller the source tree
+    is gone; the bundled data is unpacked under ``sys._MEIPASS`` (we add it via
+    ``--add-data data/processed:data/processed``), so that dir is the root.
+    """
+    if getattr(sys, "frozen", False):
+        return Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+    return Path(__file__).resolve().parents[2]
+
+
+# Directory containing data/processed/; differs between source and frozen runs.
+_REPO_ROOT = _resolve_repo_root()
 
 
 def load_asset_series(asset_id: str, repo_root: Path | str = _REPO_ROOT) -> pd.Series:

@@ -18,6 +18,12 @@ venv/
 # Generated notebook checkpoints.
 .ipynb_checkpoints/
 
+# PyInstaller / streamlit-desktop-app build artifacts (the exe ships via
+# GitHub Releases, never committed to the repo).
+build/
+dist/
+*.spec
+
 documents/
 .vscode/
 .claude/
