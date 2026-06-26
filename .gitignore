@@ -1,5 +1,6 @@
 # Raw source data can be large, licensed, or sensitive.
 data/raw/
+data/manual_get_resources
 
 # Keep processed datasets versioned.
 !data/processed/
