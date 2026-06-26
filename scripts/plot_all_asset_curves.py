@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 SERIES = [
     {
         "title": "Gold Price",
-        "path": Path("data/processed/gold/gold_price_annual_1926_2025.csv"),
+        "path": Path("data/processed/gold/gold_price_monthly_1978_2026.csv"),
         "value_column": "price_usd_per_troy_oz",
         "ylabel": "USD per troy oz",
         "color": "#b8860b",
@@ -66,6 +66,15 @@ OUTPUT_PATH = Path("reports/figures/all_asset_curves.png")
 def load_series(path: Path, value_column: str) -> tuple[list[int], list[float]]:
     with path.open(newline="", encoding="utf-8") as file:
         rows = list(csv.DictReader(file))
+
+    if rows and "year_month" in rows[0]:
+        # Monthly CSV: downsample to annual using each year's last month
+        # (rows are chronologically sorted, so the last write per year wins).
+        by_year: dict[int, float] = {}
+        for row in rows:
+            by_year[int(row["year_month"][:4])] = float(row[value_column])
+        years = sorted(by_year)
+        return years, [by_year[year] for year in years]
 
     years = [int(row["year"]) for row in rows]
     values = [float(row[value_column]) for row in rows]
