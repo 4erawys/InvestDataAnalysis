@@ -18,7 +18,7 @@ mamba install -n invest <package>                 # install missing packages
 This is an investment-asset data workspace evolving from one-off data scripts into a Streamlit portfolio-backtesting tool (V1). Two distinct layers exist:
 
 ### Data pipeline (built)
-- `scripts/fetch_*.py` — standalone fetchers that download from external sources (DataHub, FRED, Damodaran/NYU Stern, Eastmoney, Wikipedia) into `data/raw/`, then clean into committed annual CSVs in `data/processed/`. They use only the Python stdlib (`urllib`, `csv`) plus `xlrd` for Damodaran's `.xls`.
+- `scripts/fetch_*.py` — standalone fetchers that download from external sources (DataHub, FRED, Damodaran/NYU Stern, Eastmoney, Wikipedia) into `data/raw/`, then clean into committed CSVs in `data/processed/`. Most use only the Python stdlib (`urllib`, `csv`) plus `xlrd` for Damodaran's `.xls`; `fetch_gold_monthly_price_data.py` reads a manually-downloaded WGC `.xlsx` from `data/manual_get_resources/` via pandas + `openpyxl`.
 - `scripts/plot_*.py` — render static matplotlib charts into `reports/figures/`.
 - Each script is self-contained with its own source-URL constants and `main()`; there is no shared fetch library. Keep them direct and reproducible.
 
@@ -36,10 +36,10 @@ The V1 implementation plan and the detailed task breakdown, acceptance criteria,
 
 ## Data conventions
 
-- `data/raw/` is gitignored source material — **never read or commit it** for analysis tasks; treat `data/processed/` as the only input.
-- Processed CSVs follow a fixed schema: `year,<value_column>,frequency,source,source_url,notes`. The value column is `index_level` for all index/bond series and `price_usd_per_troy_oz` for gold.
-- All current data is **annual**. V1 builds the full backtest on annual data; monthly/quarterly rebalancing options are interface-level approximations (annual nodes) until higher-frequency data is added — keep this caveat surfaced in any UI.
-- Filenames encode the range, e.g. `sp500_annual_1926_2025.csv`. Preserve this pattern when adding series.
+- `data/raw/` is gitignored source material — **never read or commit it** for analysis tasks; treat `data/processed/` as the only input. `data/manual_get_resources/` is also gitignored: it holds source files that must be downloaded by hand (e.g. the World Gold Council `.xlsx`, which has no stable direct-download URL); a `fetch_*` script reads from it and writes the committed processed CSV.
+- Processed CSVs follow a fixed schema. Annual series use `year,<value_column>,frequency,source,source_url,notes`; monthly series swap the first column for `year_month` (`YYYY-MM`): `year_month,<value_column>,frequency,source,source_url,notes`. The value column is `index_level` for all index/bond series and `price_usd_per_troy_oz` for gold.
+- **Mixed frequencies**: gold is now **monthly** (WGC/LBMA, 1978→), the other six assets are still **annual**. `data_loader` aligns a selection to the *coarsest* common frequency — any annual asset forces the whole set to annual (monthly series downsampled to each year's last month), `periods_per_year=1`; only an all-monthly selection stays monthly, `periods_per_year=12` (which `metrics` uses for annualization). Never upsample/interpolate annual into monthly. Monthly vs quarterly rebalancing is still an interface-level approximation until a second monthly asset exists — keep this caveat surfaced in the UI.
+- Filenames encode the range and frequency, e.g. `sp500_annual_1926_2025.csv`, `gold_price_monthly_1978_2026.csv`. Preserve this pattern when adding series.
 - Bonds use the U.S. 10Y Treasury **total return index** (Damodaran) as the performance curve, not raw yields.
 
 ## Verification

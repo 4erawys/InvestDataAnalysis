@@ -16,7 +16,7 @@ Keep new reusable code in `scripts/` only if it is small and task-specific. If s
 
 Run everything inside the `invest` conda environment.
 
-- `conda run -n invest python scripts/fetch_gold_price_data.py` downloads and prepares gold data.
+- `conda run -n invest python scripts/fetch_gold_monthly_price_data.py` builds the monthly gold series from the manually-downloaded WGC `.xlsx`.
 - `conda run -n invest python scripts/fetch_index_data.py` builds U.S. and China equity index datasets.
 - `conda run -n invest python scripts/fetch_china_index_data.py` fetches Shanghai and CSI 300 data.
 - `conda run -n invest python scripts/fetch_bond_data.py` fetches U.S. and China bond series.
@@ -35,11 +35,19 @@ Keep scripts direct and reproducible. Avoid new abstractions unless they will be
 
 Treat `data/raw/` as source material and `data/processed/` as the committed output. Raw downloads may be large, licensed, or noisy; do not add them to Git unless they are required for reproducibility.
 
-When adding a new series, preserve the existing CSV pattern:
+When adding a new series, preserve the existing CSV pattern. Annual series:
 
 ```csv
 year,<value_column>,frequency,source,source_url,notes
 ```
+
+Monthly series swap the first column for `year_month` (`YYYY-MM`):
+
+```csv
+year_month,<value_column>,frequency,source,source_url,notes
+```
+
+The loader aligns mixed-frequency selections to the coarsest common frequency (any annual asset downsamples monthly ones to year-end). Manually-downloaded sources (e.g. the WGC `.xlsx`) go in the gitignored `data/manual_get_resources/`.
 
 ## Testing & Verification
 
