@@ -17,7 +17,8 @@ Keep new reusable code in `scripts/` only if it is small and task-specific. If s
 Run everything inside the `invest` conda environment.
 
 - `conda run -n invest python scripts/fetch_gold_monthly_price_data.py` builds the monthly gold series from the manually-downloaded WGC `.xlsx`.
-- `conda run -n invest python scripts/fetch_index_data.py` builds U.S. and China equity index datasets.
+- `conda run -n invest python scripts/fetch_sp500_monthly_price_data.py` builds the monthly S&P 500 price series (Shiller / DataHub).
+- `conda run -n invest python scripts/fetch_nasdaq100_monthly_price_data.py` builds the monthly Nasdaq-100 price series (FRED).
 - `conda run -n invest python scripts/fetch_china_index_data.py` fetches Shanghai and CSI 300 data.
 - `conda run -n invest python scripts/fetch_bond_data.py` fetches U.S. and China bond series.
 - `conda run -n invest python scripts/plot_all_asset_curves.py` renders the combined figure.
@@ -27,7 +28,7 @@ Install missing packages with `mamba install -n invest <package>`.
 
 ## Coding Style & Naming Conventions
 
-Use Python 4-space indentation, `snake_case` for files/functions/variables, and `PascalCase` for classes. Prefer explicit column names in CSVs and keep filenames descriptive, for example `sp500_annual_1926_2025.csv`.
+Use Python 4-space indentation, `snake_case` for files/functions/variables, and `PascalCase` for classes. Prefer explicit column names in CSVs and keep filenames descriptive, for example `sp500_monthly_1871_2026.csv`.
 
 Keep scripts direct and reproducible. Avoid new abstractions unless they will be reused by multiple scripts.
 
