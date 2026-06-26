@@ -9,11 +9,11 @@ from pathlib import Path
 ASSETS: dict[str, dict[str, str]] = {
     "gold": {
         "name": "黄金",
-        "path": "data/processed/gold/gold_price_annual_1926_2025.csv",
+        "path": "data/processed/gold/gold_price_monthly_1978_2026.csv",
         "value_column": "price_usd_per_troy_oz",
         "unit": "USD / troy oz",
-        "frequency": "annual",
-        "notes": "黄金年度美元价格，非全收益指数。",
+        "frequency": "monthly",
+        "notes": "黄金月度美元价格（WGC / LBMA 月均价），非全收益指数；与年度资产混合时按年末月降为年度。",
     },
     "sp500": {
         "name": "标普 500",

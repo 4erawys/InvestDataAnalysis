@@ -19,6 +19,7 @@ from pathlib import Path
 # so add src/ to the import path here.
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
+import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
@@ -44,9 +45,10 @@ def load_catalog_assets(asset_ids: list[str]):
 def render_header() -> None:
     st.title("投资组合回测分析 · V1")
     st.info(
-        "**数据口径说明**：当前为**年度**数据；数值为原始指数点位 / 价格 / 总回报指数，"
-        "**未处理汇率**。月度 / 季度再平衡在年度数据下为**接口级近似**"
-        "（每个年度节点调回目标权重），引入更高频数据后才精确生效。"
+        "**数据口径说明**：黄金为**月度**数据，其余资产为**年度**数据；数值为原始指数点位 / "
+        "价格 / 总回报指数，**未处理汇率**。**混频对齐规则**：所选资产只要含任一年度资产，"
+        "即把月度黄金按年末月**降频到年度**再回测；仅当所选资产全为月度时才按月度计算。"
+        "月度 / 季度再平衡目前仍为**接口级近似**（出现多个月度资产后才会真正区分）。"
     )
 
 
@@ -84,13 +86,21 @@ def collect_params(catalog: dict) -> tuple[list[str], dict[str, float], str]:
     return asset_ids, weights_decimal, rebalance
 
 
+def _plot_x(index):
+    """Plotly x-axis values: convert a monthly PeriodIndex to timestamps."""
+    if isinstance(index, pd.PeriodIndex):
+        return index.to_timestamp()
+    return index
+
+
 def build_figure(normalized, nav) -> go.Figure:
     """Portfolio nav plus per-asset normalized reference curves."""
     fig = go.Figure()
+    x = _plot_x(normalized.index)
     for col in normalized.columns:
         fig.add_trace(
             go.Scatter(
-                x=normalized.index,
+                x=x,
                 y=normalized[col],
                 name=col,
                 mode="lines",
@@ -100,7 +110,7 @@ def build_figure(normalized, nav) -> go.Figure:
         )
     fig.add_trace(
         go.Scatter(
-            x=nav.index,
+            x=_plot_x(nav.index),
             y=nav.values,
             name="组合净值",
             mode="lines",
@@ -109,7 +119,7 @@ def build_figure(normalized, nav) -> go.Figure:
     )
     fig.update_layout(
         title="组合净值曲线（起点 = 1）",
-        xaxis_title="年份",
+        xaxis_title="时间",
         yaxis_title="净值",
         hovermode="x unified",
         legend=dict(orientation="h", yanchor="bottom", y=1.02),
@@ -152,7 +162,10 @@ def main() -> None:
         st.error(f"无法加载所选资产：{exc}")
         return
 
-    year_min, year_max = int(data.index.min()), int(data.index.max())
+    index_years = (
+        data.index.year if isinstance(data.index, pd.PeriodIndex) else data.index
+    )
+    year_min, year_max = int(min(index_years)), int(max(index_years))
     if year_min >= year_max:
         st.warning("所选资产的共同年份不足以回测。")
         return
@@ -168,11 +181,13 @@ def main() -> None:
     try:
         sliced = dl.filter_date_range(data, start, end)
         if len(sliced) < 2:
-            st.warning("所选区间过短（不足 2 个年度点），无法计算指标。")
+            st.warning("所选区间过短（不足 2 个数据点），无法计算指标。")
             return
         normalized = dl.normalize_prices(sliced)
         nav = pf.backtest_portfolio(normalized, weights, rebalance)
-        metrics = m.calculate_metrics(nav)
+        metrics = m.calculate_metrics(
+            nav, periods_per_year=dl.infer_periods_per_year(sliced)
+        )
     except ValueError as exc:
         st.error(f"回测失败：{exc}")
         return
