@@ -16,14 +16,14 @@ SERIES = [
     },
     {
         "title": "S&P 500",
-        "path": Path("data/processed/indices/sp500_annual_1926_2025.csv"),
+        "path": Path("data/processed/indices/sp500_monthly_1871_2026.csv"),
         "value_column": "index_level",
         "ylabel": "Index level",
         "color": "#1f77b4",
     },
     {
         "title": "Nasdaq-100",
-        "path": Path("data/processed/indices/nasdaq100_annual_1985_2025.csv"),
+        "path": Path("data/processed/indices/nasdaq100_monthly_1986_2026.csv"),
         "value_column": "index_level",
         "ylabel": "Index level",
         "color": "#9467bd",
