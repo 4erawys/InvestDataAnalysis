@@ -9,8 +9,8 @@ from invest_analysis import data_loader as dl
 
 
 def test_load_asset_series_is_year_indexed():
-    series = dl.load_asset_series("sp500")
-    assert series.name == "sp500"
+    series = dl.load_asset_series("sse_composite")
+    assert series.name == "sse_composite"
     assert series.index.name == "year"
     assert series.index.is_monotonic_increasing  # sorted by year
     assert series.notna().all()
@@ -40,27 +40,27 @@ def test_load_asset_series_downsamples_monthly_to_annual():
 
 
 def test_load_assets_pure_annual_overlap():
-    data = dl.load_assets(["sp500", "us_10y_treasury_total_return"])
-    # sp500 starts 1926, treasury 1928 -> intersection starts 1928.
-    assert int(data.index.min()) == 1928
+    data = dl.load_assets(["sse_composite", "us_10y_treasury_total_return"])
+    # sse starts 1990, treasury 1928 -> intersection starts 1990.
+    assert int(data.index.min()) == 1990
     assert int(data.index.max()) == 2025
-    assert list(data.columns) == ["sp500", "us_10y_treasury_total_return"]
+    assert list(data.columns) == ["sse_composite", "us_10y_treasury_total_return"]
 
 
 def test_load_assets_partial_overlap():
-    data = dl.load_assets(["nasdaq100", "csi300"])
+    data = dl.load_assets(["csi300", "sse_composite"])
     # csi300 starts in 2005, so the intersection starts there.
     assert int(data.index.min()) == 2005
     assert int(data.index.max()) == 2025
 
 
 def test_load_assets_mixed_frequency_resolves_to_annual():
-    data = dl.load_assets(["gold", "sp500"])
+    data = dl.load_assets(["gold", "us_10y_treasury_total_return"])
     # Monthly gold is downsampled to annual; intersection starts at gold's 1978.
     assert not isinstance(data.index, pd.PeriodIndex)
     assert int(data.index.min()) == 1978
     assert int(data.index.max()) == 2025
-    assert list(data.columns) == ["gold", "sp500"]
+    assert list(data.columns) == ["gold", "us_10y_treasury_total_return"]
 
 
 def test_load_assets_all_monthly_stays_monthly():
@@ -69,9 +69,18 @@ def test_load_assets_all_monthly_stays_monthly():
     assert dl.infer_periods_per_year(data) == 12
 
 
+def test_load_assets_two_monthly_indices_stay_monthly():
+    data = dl.load_assets(["sp500", "nasdaq100"])
+    # Both monthly; Nasdaq-100 starts 1986-01, so the intersection starts there.
+    assert isinstance(data.index, pd.PeriodIndex)
+    assert dl.infer_periods_per_year(data) == 12
+    assert data.index.min().year == 1986
+    assert list(data.columns) == ["sp500", "nasdaq100"]
+
+
 def test_infer_periods_per_year():
     monthly = dl.load_assets(["gold"])
-    annual = dl.load_assets(["sp500", "gold"])
+    annual = dl.load_assets(["gold", "us_10y_treasury_total_return"])
     assert dl.infer_periods_per_year(monthly) == 12
     assert dl.infer_periods_per_year(annual) == 1
 
@@ -93,7 +102,7 @@ def test_normalize_prices_rejects_empty():
 
 
 def test_filter_date_range_inclusive():
-    data = dl.load_assets(["gold", "sp500"])
+    data = dl.load_assets(["gold", "us_10y_treasury_total_return"])  # resolves to annual
     sliced = dl.filter_date_range(data, 2000, 2010)
     assert int(sliced.index.min()) == 2000
     assert int(sliced.index.max()) == 2010
