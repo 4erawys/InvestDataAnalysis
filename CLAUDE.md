@@ -24,7 +24,7 @@ This is an investment-asset data workspace evolving from one-off data scripts in
 
 ### Analysis package (in progress)
 - `src/invest_analysis/` holds **pure computation only — it must never import `streamlit`**. This algo/UI separation is a hard constraint.
-- `assets.py` is the single source of truth mapping the 7 supported assets to their processed-CSV path, display name, and `value_column`. `get_asset_catalog()` returns it; `validate_asset_catalog()` checks every file exists and contains its value column.
+- `assets.py` is the single source of truth mapping the supported assets to their processed-CSV path, display name, and `value_column`. `get_asset_catalog()` returns it; `validate_asset_catalog()` checks every file exists and contains its value column. Besides the 7 CSV-backed assets there is one **synthetic** asset, `cash` (id from `CASH_ID`, flagged `synthetic: True`, no path/`value_column`): it carries no data, normalizes to a flat 1.0 nav (0% return, 0 volatility), is frequency-neutral, and must be combined with at least one real asset (`load_assets` raises otherwise). `is_synthetic(asset_id)` gates it; `validate_asset_catalog` skips synthetic assets.
 - Planned modules (per `documents/0625_V1核心功能实施计划.md`): `data_loader.py` (load/align/normalize to start=1), `portfolio.py` (weight validation + backtest), `metrics.py` (cumulative/annualized return, volatility, max drawdown, Sharpe). `app.py` at repo root is the Streamlit UI entry that imports this package.
 
 The V1 implementation plan and the detailed task breakdown, acceptance criteria, and module signatures live in `documents/0625_V1核心功能实施计划.md` (sourced from `documents/0625需求文档.md`). Consult it before implementing analysis modules. Note: `documents/` is gitignored.
