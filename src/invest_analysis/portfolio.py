@@ -6,6 +6,7 @@ streamlit. Inputs and outputs are pandas objects only.
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 
@@ -13,7 +14,7 @@ import pandas as pd
 _WEIGHT_TOLERANCE = 1e-6
 
 # Rebalancing modes understood by backtest_portfolio.
-_REBALANCE_MODES = ("none", "monthly", "quarterly")
+_REBALANCE_MODES = ("none", "monthly", "quarterly", "annual")
 
 
 def validate_weights(weights: dict[str, float]) -> None:
@@ -47,13 +48,16 @@ def backtest_portfolio(
 
     - ``none``: true buy-and-hold. Initial capital is split by target weights;
       holdings then drift with each asset's return, no further trading.
-    - ``monthly`` / ``quarterly``: reset to target weights at the end of each
-      period. NOTE: the current data is annual, so with this data both modes
-      reset at every annual node and are therefore an interface-level annual
-      approximation. They will take effect precisely once higher-frequency data
-      is introduced (the resampling rule changes, this function does not).
+    - ``monthly`` / ``quarterly`` / ``annual``: reset to target weights at each
+      calendar boundary — every month, every quarter-end (Mar/Jun/Sep/Dec), or
+      every year-end (Dec) respectively. The boundary is read from the price
+      index (see ``_rebalance_boundary_mask``). On a monthly PeriodIndex the
+      three modes follow their true calendar boundaries and generally diverge.
+      On an integer-year (annual, or mixed-frequency downsampled to annual)
+      index every row is the finest available node, so all three reset every
+      row and coincide.
 
-    Returns a year-indexed Series starting at 1.0.
+    Returns a Series indexed like ``normalized_prices`` and starting at 1.0.
     """
     if rebalance not in _REBALANCE_MODES:
         raise ValueError(
@@ -92,22 +96,51 @@ def _backtest_buy_and_hold(prices: pd.DataFrame, weights: pd.Series) -> pd.Serie
     return holdings_value.sum(axis=1)
 
 
+def _rebalance_boundary_mask(index: pd.Index, rebalance: str) -> np.ndarray:
+    """Boolean mask marking the rows at which to reset holdings to target.
+
+    - ``monthly``: every existing period is a boundary (monthly data -> every
+      month; annual data -> every year).
+    - ``quarterly`` / ``annual`` on a monthly PeriodIndex: calendar quarter-ends
+      (months 3/6/9/12) and year-ends (month 12) respectively.
+    - any mode on a non-PeriodIndex (integer-year) index: every row, because an
+      annual node is already the finest data we have — so the three periodic
+      modes coincide there.
+    """
+    n = len(index)
+    if rebalance == "monthly" or not isinstance(index, pd.PeriodIndex):
+        return np.ones(n, dtype=bool)
+
+    months = np.asarray(index.month)
+    if rebalance == "quarterly":
+        return months % 3 == 0
+    # annual
+    return months == 12
+
+
 def _backtest_periodic_rebalance(
     prices: pd.DataFrame, weights: pd.Series, rebalance: str
 ) -> pd.Series:
-    """Reset to target weights at each rebalance node.
+    """Hold units between calendar boundaries; reset to target weights on them.
 
-    With annual data every row is a rebalance node, so this reduces to chaining
-    per-period weighted returns. The per-period return of the rebalanced
-    portfolio is the weight-dot-product of each asset's per-period return.
+    Initial capital is bought at target weights. Holdings then drift with
+    returns; on each boundary row (``_rebalance_boundary_mask``) the position is
+    reset to the target weights using the current total value (a costless
+    reallocation that leaves the booked nav unchanged but redirects future
+    drift). When every row is a boundary this is equivalent to chaining
+    per-period weighted returns.
     """
-    # Per-period simple returns of each asset.
-    asset_returns = prices.pct_change()
+    boundary = _rebalance_boundary_mask(prices.index, rebalance)
+    price_matrix = prices.to_numpy(dtype=float)
+    weight_vector = weights.to_numpy(dtype=float)  # aligned to prices columns
 
-    # Portfolio per-period return = sum(weight_i * asset_return_i), rebalanced.
-    portfolio_returns = asset_returns.mul(weights, axis=1).sum(axis=1)
+    units = weight_vector / price_matrix[0]
+    nav = np.empty(len(prices), dtype=float)
+    for i in range(len(prices)):
+        row = price_matrix[i]
+        value = float(units @ row)
+        nav[i] = value
+        if boundary[i]:
+            units = weight_vector * value / row
 
-    # First period has no prior point; its return is 0 so nav starts at 1.
-    portfolio_returns.iloc[0] = 0.0
-    nav = (1.0 + portfolio_returns).cumprod()
-    return nav
+    return pd.Series(nav, index=prices.index)

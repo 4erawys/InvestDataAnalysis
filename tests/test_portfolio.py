@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from invest_analysis import data_loader as dl
 from invest_analysis import portfolio as pf
 
 
@@ -17,6 +18,12 @@ def _sample_prices() -> pd.DataFrame:
         },
         index=[2000, 2001, 2002],
     )
+
+
+def _monthly_prices(a: list[float], b: list[float]) -> pd.DataFrame:
+    """Two assets on a monthly PeriodIndex starting 2000-01."""
+    index = pd.period_range("2000-01", periods=len(a), freq="M")
+    return pd.DataFrame({"a": a, "b": b}, index=index)
 
 
 # --- weight validation -------------------------------------------------------
@@ -66,7 +73,7 @@ def test_buy_and_hold_known_values():
 
 def test_nav_starts_at_one():
     prices = _sample_prices()
-    for mode in ("none", "monthly", "quarterly"):
+    for mode in ("none", "monthly", "quarterly", "annual"):
         nav = pf.backtest_portfolio(prices, {"a": 0.5, "b": 0.5}, mode)
         assert nav.iloc[0] == pytest.approx(1.0)
 
@@ -83,11 +90,81 @@ def test_weights_reference_unknown_asset():
         pf.backtest_portfolio(prices, {"a": 0.5, "z": 0.5}, "none")
 
 
-def test_annual_data_monthly_equals_quarterly():
-    # On annual data every row is a rebalance node, so monthly and quarterly
-    # reduce to the same annual-node approximation.
+def test_annual_data_periodic_modes_coincide():
+    # On annual (integer-year) data every row is the finest node, so monthly,
+    # quarterly and annual rebalancing all reset every row and coincide.
     prices = _sample_prices()
     weights = {"a": 0.5, "b": 0.5}
     nav_m = pf.backtest_portfolio(prices, weights, "monthly")
     nav_q = pf.backtest_portfolio(prices, weights, "quarterly")
+    nav_a = pf.backtest_portfolio(prices, weights, "annual")
     pd.testing.assert_series_equal(nav_m, nav_q)
+    pd.testing.assert_series_equal(nav_m, nav_a)
+
+
+# --- per-boundary rebalancing on monthly data --------------------------------
+
+
+def test_boundary_mask_on_monthly_index():
+    index = pd.period_range("2000-01", periods=12, freq="M")
+    quarterly = pf._rebalance_boundary_mask(index, "quarterly")
+    annual = pf._rebalance_boundary_mask(index, "annual")
+    monthly = pf._rebalance_boundary_mask(index, "monthly")
+    # Quarter-ends are months 3/6/9/12 -> positions 2,5,8,11.
+    assert list(index.month[quarterly]) == [3, 6, 9, 12]
+    # Year-end is month 12 only.
+    assert list(index.month[annual]) == [12]
+    # Monthly resets every period.
+    assert monthly.all()
+
+
+def test_boundary_mask_on_annual_index_is_all_true():
+    index = pd.Index([2000, 2001, 2002])
+    for mode in ("monthly", "quarterly", "annual"):
+        assert pf._rebalance_boundary_mask(index, mode).all()
+
+
+def test_quarterly_differs_from_buy_and_hold():
+    # a doubles in month 2 then holds; b halves in month 4. Quarter-end at
+    # 2000-03 rebalances before b's drop, changing the final value.
+    prices = _monthly_prices(a=[1.0, 2.0, 2.0, 2.0], b=[1.0, 1.0, 1.0, 0.5])
+    weights = {"a": 0.5, "b": 0.5}
+    nav_none = pf.backtest_portfolio(prices, weights, "none")
+    nav_q = pf.backtest_portfolio(prices, weights, "quarterly")
+    assert nav_none.iloc[-1] == pytest.approx(1.25)
+    assert nav_q.iloc[-1] == pytest.approx(1.125)
+
+
+def test_monthly_differs_from_quarterly():
+    # a spikes in month 2 then reverts; b doubles in month 4. Monthly resets at
+    # the month-2 peak (locking in the gain) while quarterly does not.
+    prices = _monthly_prices(a=[1.0, 2.0, 1.0, 1.0], b=[1.0, 1.0, 1.0, 2.0])
+    weights = {"a": 0.5, "b": 0.5}
+    nav_m = pf.backtest_portfolio(prices, weights, "monthly")
+    nav_q = pf.backtest_portfolio(prices, weights, "quarterly")
+    assert nav_m.iloc[-1] == pytest.approx(1.6875)
+    assert nav_q.iloc[-1] == pytest.approx(1.5)
+
+
+def test_periodic_without_boundary_equals_buy_and_hold():
+    # Two months only (no quarter-end), so quarterly never rebalances.
+    prices = _monthly_prices(a=[1.0, 2.0], b=[1.0, 0.5])
+    weights = {"a": 0.5, "b": 0.5}
+    nav_none = pf.backtest_portfolio(prices, weights, "none")
+    nav_q = pf.backtest_portfolio(prices, weights, "quarterly")
+    pd.testing.assert_series_equal(nav_none, nav_q, check_names=False)
+
+
+def test_real_all_monthly_modes_diverge():
+    # On a genuinely monthly selection the three periodic modes follow distinct
+    # calendar boundaries and must produce different paths.
+    data = dl.load_assets(["gold", "sp500", "nasdaq100"])
+    normalized = dl.normalize_prices(data)
+    weights = {"gold": 1 / 3, "sp500": 1 / 3, "nasdaq100": 1 / 3}
+    ends = {
+        mode: pf.backtest_portfolio(normalized, weights, mode).iloc[-1]
+        for mode in ("monthly", "quarterly", "annual")
+    }
+    assert ends["monthly"] != pytest.approx(ends["quarterly"])
+    assert ends["quarterly"] != pytest.approx(ends["annual"])
+    assert ends["monthly"] != pytest.approx(ends["annual"])

@@ -33,7 +33,11 @@ REBALANCE_OPTIONS = {
     "不再平衡（买入持有）": "none",
     "月度再平衡": "monthly",
     "季度再平衡": "quarterly",
+    "年度再平衡": "annual",
 }
+
+# Periodic modes that coincide when the selection is downsampled to annual.
+_PERIODIC_MODES = {"monthly", "quarterly", "annual"}
 
 
 @st.cache_data(show_spinner=False)
@@ -48,7 +52,8 @@ def render_header() -> None:
         "**数据口径说明**：黄金、标普 500、纳斯达克 100 为**月度**数据，其余资产为**年度**数据；"
         "数值为原始指数点位 / 价格 / 总回报指数，**未处理汇率**。**混频对齐规则**：所选资产只要含任一年度资产，"
         "即把月度资产按年末月**降频到年度**再回测；仅当所选资产全为月度时才按月度计算。"
-        "月度 / 季度再平衡目前仍为**接口级近似**——回测在每个数据周期都再平衡，尚未按真正的月 / 季边界区分。"
+        "**再平衡**按真实日历边界生效：全月度选择下月度 / 季度 / 年度再平衡分别在每月 / 季末 / 年末重置，"
+        "结果不同；含年度资产（降为年度）时数据只有年度节点，三者重合。"
     )
 
 
@@ -191,6 +196,12 @@ def main() -> None:
     except ValueError as exc:
         st.error(f"回测失败：{exc}")
         return
+
+    if dl.infer_periods_per_year(sliced) == 1 and rebalance in _PERIODIC_MODES:
+        st.info(
+            "本次选择含年度资产，已降频到年度，月度 / 季度 / 年度再平衡结果相同；"
+            "如需区分不同再平衡频率，请仅选择月度资产（黄金 / 标普 500 / 纳斯达克 100）。"
+        )
 
     render_metrics(metrics)
     st.plotly_chart(build_figure(normalized, nav), use_container_width=True)
