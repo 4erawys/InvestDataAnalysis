@@ -10,10 +10,21 @@ from pathlib import Path
 # adopts whatever index/frequency the real assets resolve to (see data_loader).
 CASH_ID = "cash"
 
+# Display order and Chinese labels for the asset categories shown in the UI's
+# grouped asset picker. Each asset carries a ``category`` matching a key here.
+CATEGORY_ORDER = ("commodity", "bond", "equity", "cash")
+CATEGORY_NAMES = {
+    "commodity": "大宗商品",
+    "bond": "债券",
+    "equity": "股票ETF",
+    "cash": "现金",
+}
+
 
 ASSETS: dict[str, dict] = {
     "gold": {
         "name": "黄金",
+        "category": "commodity",
         "path": "data/processed/gold/gold_price_monthly_1978_2026.csv",
         "value_column": "price_usd_per_troy_oz",
         "unit": "USD / troy oz",
@@ -22,6 +33,7 @@ ASSETS: dict[str, dict] = {
     },
     "sp500": {
         "name": "标普 500",
+        "category": "equity",
         "path": "data/processed/indices/sp500_monthly_1871_2026.csv",
         "value_column": "index_level",
         "unit": "index points",
@@ -30,6 +42,7 @@ ASSETS: dict[str, dict] = {
     },
     "nasdaq100": {
         "name": "纳斯达克 100",
+        "category": "equity",
         "path": "data/processed/indices/nasdaq100_monthly_1986_2026.csv",
         "value_column": "index_level",
         "unit": "index points",
@@ -38,6 +51,7 @@ ASSETS: dict[str, dict] = {
     },
     "sse_composite": {
         "name": "上证指数",
+        "category": "equity",
         "path": "data/processed/indices/sse_composite_annual_1990_2025.csv",
         "value_column": "index_level",
         "unit": "index points",
@@ -46,6 +60,7 @@ ASSETS: dict[str, dict] = {
     },
     "csi300": {
         "name": "沪深 300",
+        "category": "equity",
         "path": "data/processed/indices/csi300_annual_2005_2025.csv",
         "value_column": "index_level",
         "unit": "index points",
@@ -54,6 +69,7 @@ ASSETS: dict[str, dict] = {
     },
     "us_10y_treasury_total_return": {
         "name": "美国 10 年期国债总回报指数",
+        "category": "bond",
         "path": "data/processed/bonds/us_10y_treasury_total_return_index_annual_1928_2025.csv",
         "value_column": "index_level",
         "unit": "total return index",
@@ -62,6 +78,7 @@ ASSETS: dict[str, dict] = {
     },
     "china_treasury_bond_index": {
         "name": "中国国债指数",
+        "category": "bond",
         "path": "data/processed/bonds/china_treasury_bond_index_annual_2003_2025.csv",
         "value_column": "index_level",
         "unit": "index points",
@@ -70,6 +87,7 @@ ASSETS: dict[str, dict] = {
     },
     CASH_ID: {
         "name": "现金",
+        "category": "cash",
         "synthetic": True,
         "unit": "constant",
         "notes": "现金（什么都不买）：0% 回报、0 波动的合成资产，不需要数据；"
@@ -86,6 +104,26 @@ def is_synthetic(asset_id: str) -> bool:
 def get_asset_catalog() -> dict[str, dict]:
     """Return a defensive copy of the configured V1 asset catalog."""
     return deepcopy(ASSETS)
+
+
+def get_grouped_catalog() -> list[tuple[str, list[tuple[str, dict]]]]:
+    """Catalog grouped by category in display order for the UI asset picker.
+
+    Returns ``[(category_label, [(asset_id, metadata), ...]), ...]`` following
+    ``CATEGORY_ORDER``; within a category, assets keep their declared order.
+    Empty categories are omitted.
+    """
+    catalog = get_asset_catalog()
+    groups: list[tuple[str, list[tuple[str, dict]]]] = []
+    for category in CATEGORY_ORDER:
+        members = [
+            (asset_id, metadata)
+            for asset_id, metadata in catalog.items()
+            if metadata.get("category") == category
+        ]
+        if members:
+            groups.append((CATEGORY_NAMES[category], members))
+    return groups
 
 
 def validate_asset_catalog(repo_root: Path | str = ".") -> None:

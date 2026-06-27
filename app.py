@@ -28,6 +28,7 @@ from invest_analysis import metrics as m
 from invest_analysis import portfolio as pf
 from invest_analysis.assets import (
     get_asset_catalog,
+    get_grouped_catalog,
     is_synthetic,
 )
 
@@ -65,11 +66,25 @@ def collect_params(catalog: dict) -> tuple[list[str], dict[str, float], str]:
     """Sidebar controls; returns (asset_ids, weights_decimal, rebalance_mode)."""
     st.sidebar.header("回测参数")
 
-    name_to_id = {meta["name"]: aid for aid, meta in catalog.items()}
-    selected_names = st.sidebar.multiselect(
-        "选择资产", options=list(name_to_id.keys())
-    )
-    asset_ids = [name_to_id[name] for name in selected_names]
+    # Build the picker options grouped by category, in display order. Streamlit's
+    # multiselect has no native option groups, so insert non-selectable header
+    # rows ("—— 股票ETF ——") between groups and filter them back out of the
+    # selection. The headers are only visual separators.
+    options: list[str] = []
+    header_labels: set[str] = set()
+    name_to_id: dict[str, str] = {}
+    for category_label, members in get_grouped_catalog():
+        header = f"—— {category_label} ——"
+        options.append(header)
+        header_labels.add(header)
+        for aid, meta in members:
+            options.append(meta["name"])
+            name_to_id[meta["name"]] = aid
+
+    selected_names = st.sidebar.multiselect("选择资产", options=options)
+    asset_ids = [
+        name_to_id[name] for name in selected_names if name not in header_labels
+    ]
 
     weights: dict[str, float] = {}
     if asset_ids:
