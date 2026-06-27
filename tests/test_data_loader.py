@@ -9,8 +9,8 @@ from invest_analysis import data_loader as dl
 
 
 def test_load_asset_series_is_year_indexed():
-    series = dl.load_asset_series("sse_composite")
-    assert series.name == "sse_composite"
+    series = dl.load_asset_series("us_10y_treasury_total_return")
+    assert series.name == "us_10y_treasury_total_return"
     assert series.index.name == "year"
     assert series.index.is_monotonic_increasing  # sorted by year
     assert series.notna().all()
@@ -49,9 +49,11 @@ def test_load_assets_pure_annual_overlap():
 
 def test_load_assets_partial_overlap():
     data = dl.load_assets(["csi300", "sse_composite"])
-    # csi300 starts in 2005, so the intersection starts there.
-    assert int(data.index.min()) == 2005
-    assert int(data.index.max()) == 2025
+    # Both monthly now; csi300 starts 2005-01, so the intersection starts there.
+    assert isinstance(data.index, pd.PeriodIndex)
+    assert dl.infer_periods_per_year(data) == 12
+    assert data.index.min() == pd.Period("2005-01", freq="M")
+    assert data.index.max().year == 2026
 
 
 def test_load_assets_mixed_frequency_resolves_to_annual():
@@ -103,12 +105,12 @@ def test_cash_is_constant_and_frequency_neutral_on_monthly():
 
 
 def test_cash_adopts_annual_index_with_annual_asset():
-    data = dl.load_assets(["csi300", "cash"])
+    data = dl.load_assets(["us_10y_treasury_total_return", "cash"])
     assert not isinstance(data.index, pd.PeriodIndex)
     assert dl.infer_periods_per_year(data) == 1
     assert (data["cash"] == 1.0).all()
     # Cash spans exactly the real asset's index.
-    assert len(data) == len(dl.load_assets(["csi300"]))
+    assert len(data) == len(dl.load_assets(["us_10y_treasury_total_return"]))
 
 
 def test_cash_preserves_caller_column_order():
