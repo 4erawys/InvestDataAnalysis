@@ -6,7 +6,12 @@ from copy import deepcopy
 from pathlib import Path
 
 
-ASSETS: dict[str, dict[str, str]] = {
+# Synthetic (data-free) asset id. Cash has no CSV: it is a constant series that
+# adopts whatever index/frequency the real assets resolve to (see data_loader).
+CASH_ID = "cash"
+
+
+ASSETS: dict[str, dict] = {
     "gold": {
         "name": "黄金",
         "path": "data/processed/gold/gold_price_monthly_1978_2026.csv",
@@ -63,19 +68,36 @@ ASSETS: dict[str, dict[str, str]] = {
         "frequency": "annual",
         "notes": "年度年末国债指数点位。",
     },
+    CASH_ID: {
+        "name": "现金",
+        "synthetic": True,
+        "unit": "constant",
+        "notes": "现金（什么都不买）：0% 回报、0 波动的合成资产，不需要数据；"
+        "频率随其余资产，需至少搭配一个真实资产以确定时间轴。",
+    },
 }
 
 
-def get_asset_catalog() -> dict[str, dict[str, str]]:
+def is_synthetic(asset_id: str) -> bool:
+    """Whether an asset id is a data-free synthetic asset (e.g. cash)."""
+    return bool(ASSETS.get(asset_id, {}).get("synthetic", False))
+
+
+def get_asset_catalog() -> dict[str, dict]:
     """Return a defensive copy of the configured V1 asset catalog."""
     return deepcopy(ASSETS)
 
 
 def validate_asset_catalog(repo_root: Path | str = ".") -> None:
-    """Validate that every asset file exists and contains its value column."""
+    """Validate that every asset file exists and contains its value column.
+
+    Synthetic assets (cash) carry no CSV and are skipped.
+    """
     root = Path(repo_root)
 
     for asset_id, metadata in ASSETS.items():
+        if is_synthetic(asset_id):
+            continue
         csv_path = root / metadata["path"]
         if not csv_path.exists():
             raise FileNotFoundError(f"{asset_id}: missing CSV file {csv_path}")

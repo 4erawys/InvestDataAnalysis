@@ -20,7 +20,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .assets import ASSETS
+from .assets import ASSETS, is_synthetic
 
 # Observations per calendar year for each supported frequency.
 PERIODS_PER_YEAR = {"annual": 1, "monthly": 12}
@@ -106,6 +106,10 @@ def load_assets(
     Mixed frequencies are resolved to the coarsest common frequency: any annual
     asset forces the whole set to annual (monthly series are downsampled). If the
     assets share no common periods the result is empty and a ValueError is raised.
+
+    Synthetic assets (cash) carry no CSV: they are frequency-neutral and are
+    added as a constant column over the real assets' resolved index. Cash must be
+    combined with at least one real asset, which supplies the time axis.
     """
     if not asset_ids:
         raise ValueError("asset_ids must not be empty")
@@ -114,19 +118,35 @@ def load_assets(
     if unknown:
         raise KeyError(f"unknown asset ids: {unknown}")
 
-    frequencies = {ASSETS[aid]["frequency"] for aid in asset_ids}
+    synthetic_ids = [aid for aid in asset_ids if is_synthetic(aid)]
+    real_ids = [aid for aid in asset_ids if not is_synthetic(aid)]
+
+    if not real_ids:
+        raise ValueError(
+            "synthetic assets (cash) need at least one real asset to provide a "
+            f"time axis; got only {synthetic_ids}"
+        )
+
+    # Cash is frequency-neutral: resolve the frequency from real assets only.
+    frequencies = {ASSETS[aid]["frequency"] for aid in real_ids}
     resolved = "annual" if "annual" in frequencies else "monthly"
 
     series = [
-        load_asset_series(aid, repo_root, target_freq=resolved) for aid in asset_ids
+        load_asset_series(aid, repo_root, target_freq=resolved) for aid in real_ids
     ]
     data = pd.concat(series, axis=1, join="inner")
 
     if data.empty:
         raise ValueError(
-            f"no common dates across assets: {asset_ids}; cannot build a comparable series"
+            f"no common dates across assets: {real_ids}; cannot build a comparable series"
         )
-    return data
+
+    # A constant column normalizes to a flat 1.0 nav (0% return, 0 volatility).
+    for aid in synthetic_ids:
+        data[aid] = 1.0
+
+    # Restore the caller's column order so weights line up intuitively.
+    return data[asset_ids]
 
 
 def infer_periods_per_year(data: pd.DataFrame | pd.Series) -> int:

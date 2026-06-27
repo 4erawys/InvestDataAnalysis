@@ -90,6 +90,42 @@ def test_load_assets_empty_list_raises():
         dl.load_assets([])
 
 
+# --- cash (synthetic asset) --------------------------------------------------
+
+
+def test_cash_is_constant_and_frequency_neutral_on_monthly():
+    data = dl.load_assets(["gold", "cash"])
+    # Monthly gold keeps the selection monthly; cash does not drag it to annual.
+    assert isinstance(data.index, pd.PeriodIndex)
+    assert dl.infer_periods_per_year(data) == 12
+    assert list(data.columns) == ["gold", "cash"]
+    assert (data["cash"] == 1.0).all()
+
+
+def test_cash_adopts_annual_index_with_annual_asset():
+    data = dl.load_assets(["csi300", "cash"])
+    assert not isinstance(data.index, pd.PeriodIndex)
+    assert dl.infer_periods_per_year(data) == 1
+    assert (data["cash"] == 1.0).all()
+    # Cash spans exactly the real asset's index.
+    assert len(data) == len(dl.load_assets(["csi300"]))
+
+
+def test_cash_preserves_caller_column_order():
+    data = dl.load_assets(["cash", "gold"])
+    assert list(data.columns) == ["cash", "gold"]
+
+
+def test_cash_only_raises():
+    with pytest.raises(ValueError):
+        dl.load_assets(["cash"])
+
+
+def test_cash_normalizes_to_flat_one():
+    normalized = dl.normalize_prices(dl.load_assets(["gold", "cash"]))
+    assert (normalized["cash"] == 1.0).all()
+
+
 def test_normalize_prices_first_row_is_one():
     data = dl.load_assets(["gold", "sp500"])
     normalized = dl.normalize_prices(data)

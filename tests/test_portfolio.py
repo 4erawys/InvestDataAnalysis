@@ -155,6 +155,28 @@ def test_periodic_without_boundary_equals_buy_and_hold():
     pd.testing.assert_series_equal(nav_none, nav_q, check_names=False)
 
 
+def test_cash_weight_one_is_flat_nav():
+    # 100% cash: nav stays at 1.0 regardless of the co-selected asset's path.
+    prices = pd.DataFrame(
+        {"a": [1.0, 2.0, 0.5], "cash": [1.0, 1.0, 1.0]},
+        index=[2000, 2001, 2002],
+    )
+    nav = pf.backtest_portfolio(prices, {"a": 0.0, "cash": 1.0}, "none")
+    assert (nav == 1.0).all()
+
+
+def test_cash_dampens_buy_and_hold():
+    # 50% a (doubles) + 50% cash (flat), buy-and-hold: end value 1.5, between
+    # the asset's 2.0 and cash's 1.0.
+    prices = pd.DataFrame(
+        {"a": [1.0, 2.0], "cash": [1.0, 1.0]},
+        index=[2000, 2001],
+    )
+    nav = pf.backtest_portfolio(prices, {"a": 0.5, "cash": 0.5}, "none")
+    assert nav.iloc[0] == pytest.approx(1.0)
+    assert nav.iloc[-1] == pytest.approx(1.5)
+
+
 def test_real_all_monthly_modes_diverge():
     # On a genuinely monthly selection the three periodic modes follow distinct
     # calendar boundaries and must produce different paths.

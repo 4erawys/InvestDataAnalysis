@@ -26,7 +26,10 @@ import streamlit as st
 from invest_analysis import data_loader as dl
 from invest_analysis import metrics as m
 from invest_analysis import portfolio as pf
-from invest_analysis.assets import get_asset_catalog
+from invest_analysis.assets import (
+    get_asset_catalog,
+    is_synthetic,
+)
 
 
 REBALANCE_OPTIONS = {
@@ -50,7 +53,8 @@ def render_header() -> None:
     st.title("投资组合回测分析 · V1")
     st.info(
         "**数据口径说明**：黄金、标普 500、纳斯达克 100 为**月度**数据，其余资产为**年度**数据；"
-        "数值为原始指数点位 / 价格 / 总回报指数，**未处理汇率**。**混频对齐规则**：所选资产只要含任一年度资产，"
+        "数值为原始指数点位 / 价格 / 总回报指数，**未处理汇率**。**现金**为 0% 回报、0 波动的合成资产，"
+        "无需数据、频率随其余资产，需至少搭配一个真实资产。**混频对齐规则**：所选资产只要含任一年度资产，"
         "即把月度资产按年末月**降频到年度**再回测；仅当所选资产全为月度时才按月度计算。"
         "**再平衡**按真实日历边界生效：全月度选择下月度 / 季度 / 年度再平衡分别在每月 / 季末 / 年末重置，"
         "结果不同；含年度资产（降为年度）时数据只有年度节点，三者重合。"
@@ -153,6 +157,10 @@ def main() -> None:
 
     if not asset_ids:
         st.info("请在左侧选择至少一个资产。")
+        return
+
+    if all(is_synthetic(aid) for aid in asset_ids):
+        st.info("现金没有自己的时间轴，请再选择至少一个真实资产（如黄金 / 标普 500 等）。")
         return
 
     # Weight-sum check before doing any work (uses validate_weights tolerance).
