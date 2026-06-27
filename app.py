@@ -53,7 +53,8 @@ def load_catalog_assets(asset_ids: list[str]):
 def render_header() -> None:
     st.title("投资组合回测分析 · V1")
     st.info(
-        "**数据口径说明**：黄金、标普 500、纳斯达克 100 为**月度**数据，其余资产为**年度**数据；"
+        "**数据口径说明**：除**美国 10 年期国债总回报指数**为**年度**数据外，其余真实资产"
+        "（黄金、标普 500、纳斯达克 100、上证指数、沪深 300、中国国债指数）均为**月度**数据；"
         "数值为原始指数点位 / 价格 / 总回报指数，**未处理汇率**。**现金**为 0% 回报、0 波动的合成资产，"
         "无需数据、频率随其余资产，需至少搭配一个真实资产。**混频对齐规则**：所选资产只要含任一年度资产，"
         "即把月度资产按年末月**降频到年度**再回测；仅当所选资产全为月度时才按月度计算。"
@@ -66,25 +67,21 @@ def collect_params(catalog: dict) -> tuple[list[str], dict[str, float], str]:
     """Sidebar controls; returns (asset_ids, weights_decimal, rebalance_mode)."""
     st.sidebar.header("回测参数")
 
-    # Build the picker options grouped by category, in display order. Streamlit's
-    # multiselect has no native option groups, so insert non-selectable header
-    # rows ("—— 股票ETF ——") between groups and filter them back out of the
-    # selection. The headers are only visual separators.
-    options: list[str] = []
-    header_labels: set[str] = set()
-    name_to_id: dict[str, str] = {}
+    # One multiselect per category, each under a plain-text subheader. Streamlit's
+    # multiselect has no non-selectable options, so a real header lives outside
+    # the box — it can never be picked. Selections are gathered in category order.
+    st.sidebar.markdown("**选择资产**")
+    asset_ids: list[str] = []
     for category_label, members in get_grouped_catalog():
-        header = f"—— {category_label} ——"
-        options.append(header)
-        header_labels.add(header)
-        for aid, meta in members:
-            options.append(meta["name"])
-            name_to_id[meta["name"]] = aid
-
-    selected_names = st.sidebar.multiselect("选择资产", options=options)
-    asset_ids = [
-        name_to_id[name] for name in selected_names if name not in header_labels
-    ]
+        st.sidebar.markdown(f"**{category_label}**")
+        name_to_id = {meta["name"]: aid for aid, meta in members}
+        selected_names = st.sidebar.multiselect(
+            category_label,
+            options=list(name_to_id.keys()),
+            key=f"sel_{category_label}",
+            label_visibility="collapsed",
+        )
+        asset_ids.extend(name_to_id[name] for name in selected_names)
 
     weights: dict[str, float] = {}
     if asset_ids:
@@ -223,7 +220,7 @@ def main() -> None:
     if dl.infer_periods_per_year(sliced) == 1 and rebalance in _PERIODIC_MODES:
         st.info(
             "本次选择含年度资产，已降频到年度，月度 / 季度 / 年度再平衡结果相同；"
-            "如需区分不同再平衡频率，请仅选择月度资产（黄金 / 标普 500 / 纳斯达克 100）。"
+            "如需区分不同再平衡频率，请勿选入年度资产（美国 10 年期国债总回报指数）。"
         )
 
     render_metrics(metrics)
